@@ -17,18 +17,18 @@ mongoose.connect(MONGODB_URI)
   .then(() => console.log('>>> DB CONNECTED'))
   .catch(err => console.error('>>> DB ERROR:', err.message));
 
-// --- MODELLAR ---
-const User = mongoose.model('User', new mongoose.Schema({
+// --- SCHEMAS ---
+const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['ADMIN', 'TEACHER', 'ACADEMIC'], required: true },
   firstName: String, 
   lastName: String, 
-  specialization: String, // Bu fan nomi yoki to'garak nomi bo'ladi
+  specialization: String, // Teacher's club/subject name
   assignedGrades: [String]
-}));
+});
 
-const Student = mongoose.model('Student', new mongoose.Schema({
+const StudentSchema = new mongoose.Schema({
   studentId: { type: String, required: true, unique: true },
   firstName: { type: String, required: true }, 
   lastName: { type: String, required: true }, 
@@ -39,42 +39,40 @@ const Student = mongoose.model('Student', new mongoose.Schema({
   monthlyFee: { type: Number, default: 0 },
   balance: { type: Number, default: 0 },
   address: String,
-  hasFood: { type: Boolean, default: false },
-  hasTransport: { type: Boolean, default: false },
   livingStatus: { type: String, default: 'home' }
-}));
+});
 
-const Attendance = mongoose.model('Attendance', new mongoose.Schema({ 
-  studentId: String, 
-  date: String, 
-  status: String, 
-  comment: String,
-  subjectId: String, // Fan yoki To'garak IDsi
-  teacherId: String  // Qaysi o'qituvchi davomat qilgani
-}));
-
-const Payment = mongoose.model('Payment', new mongoose.Schema({
-  studentId: String,
+const PaymentSchema = new mongoose.Schema({
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
   amount: Number,
   date: { type: Date, default: Date.now },
   type: { type: String, enum: ['income', 'charge'], default: 'income' },
   forMonth: String,
   comment: String
-}));
+});
 
-const ClubMember = mongoose.model('ClubMember', new mongoose.Schema({
+const ClubMemberSchema = new mongoose.Schema({
   studentId: String,
-  teacherId: String, // Har bir o'qituvchining o'z to'garagi
+  teacherId: String,
   joinDate: { type: Date, default: Date.now }
-}));
+});
 
-const Grade = mongoose.model('Grade', new mongoose.Schema({ 
+const AttendanceSchema = new mongoose.Schema({ 
   studentId: String, 
-  subjectId: String, 
   date: String, 
-  grade: Number, 
+  status: String, 
   comment: String,
+  subjectId: String,
   teacherId: String
+});
+
+const User = mongoose.model('User', UserSchema);
+const Student = mongoose.model('Student', StudentSchema);
+const Payment = mongoose.model('Payment', PaymentSchema);
+const ClubMember = mongoose.model('ClubMember', ClubMemberSchema);
+const Attendance = mongoose.model('Attendance', AttendanceSchema);
+const Grade = mongoose.model('Grade', new mongoose.Schema({ 
+  studentId: String, subjectId: String, date: String, grade: Number, comment: String, teacherId: String 
 }));
 
 // --- AUTH MIDDLEWARE ---
@@ -89,7 +87,7 @@ const auth = (req, res, next) => {
   }
 };
 
-// --- API ---
+// --- API ROUTES ---
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
@@ -100,39 +98,32 @@ app.post('/api/login', async (req, res) => {
   } else res.status(400).json({ message: 'Login yoki parol xato!' });
 });
 
-// Students
 app.get('/api/students', auth, async (req, res) => res.json(await Student.find()));
+
 app.post('/api/students', auth, async (req, res) => {
   try {
-    const s = new Student({ ...req.body, balance: -req.body.monthlyFee });
+    const studentData = { ...req.body, balance: -req.body.monthlyFee };
+    const s = new Student(studentData);
     await s.save();
     
-    // Avtomatik qarzdorlik tranzaksiyasi
-    await new Payment({
+    // Auto-charge transaction for new student
+    const charge = new Payment({
       studentId: s._id,
       amount: req.body.monthlyFee,
       type: 'charge',
       forMonth: new Date().toISOString().slice(0, 7),
-      comment: 'Yangi o\'quvchi: 1-oylik to\'lov hisoblandi'
-    }).save();
-
+      comment: 'Yangi o\'quvchi ro\'yxatdan o\'tdi. 4 kunlik to\'lov muddati boshlandi.'
+    });
+    await charge.save();
+    
     res.json(s);
   } catch(e) { res.status(400).json({ message: e.message }); }
 });
 
-// Payments
-app.get('/api/students/:id/payments', auth, async (req, res) => res.json(await Payment.find({ studentId: req.params.id }).sort({ date: -1 })));
-app.post('/api/payments', auth, async (req, res) => {
-  const p = new Payment(req.body);
-  await p.save();
-  await Student.findByIdAndUpdate(req.body.studentId, { $inc: { balance: req.body.amount } });
-  res.json(p);
-});
-
-// Club Logic (Teacher specific)
+// Club Logic: Filtered by Teacher
 app.get('/api/club/members', auth, async (req, res) => {
-  const teacherId = req.user.role === 'ADMIN' ? { $exists: true } : req.user.id;
-  res.json(await ClubMember.find({ teacherId }));
+  const filter = req.user.role === 'ADMIN' ? {} : { teacherId: req.user.id };
+  res.json(await ClubMember.find(filter));
 });
 
 app.post('/api/club/members', auth, async (req, res) => {
@@ -149,22 +140,30 @@ app.post('/api/club/members', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Financials
+app.post('/api/payments', auth, async (req, res) => {
+  const p = new Payment(req.body);
+  await p.save();
+  await Student.findByIdAndUpdate(req.body.studentId, { $inc: { balance: req.body.amount } });
+  res.json(p);
+});
+
+app.get('/api/students/:id/payments', auth, async (req, res) => {
+  res.json(await Payment.find({ studentId: req.params.id }).sort({ date: -1 }));
+});
+
 // Academic
 app.get('/api/attendance', auth, async (req, res) => res.json(await Attendance.find()));
 app.post('/api/attendance', auth, async (req, res) => {
-  const records = req.body.map(r => ({ ...r, teacherId: req.user.id }));
-  await Attendance.insertMany(records);
-  res.json({ ok: true });
-});
-app.put('/api/attendance/:id', auth, async (req, res) => {
-  await Attendance.findByIdAndUpdate(req.params.id, { comment: req.body.comment });
+  const recs = req.body.map(r => ({ ...r, teacherId: req.user.id }));
+  await Attendance.insertMany(recs);
   res.json({ ok: true });
 });
 
 app.get('/api/grades', auth, async (req, res) => res.json(await Grade.find()));
 app.post('/api/grades', auth, async (req, res) => {
-  const records = req.body.map(r => ({ ...r, teacherId: req.user.id }));
-  await Grade.insertMany(records);
+  const recs = req.body.map(r => ({ ...r, teacherId: req.user.id }));
+  await Grade.insertMany(recs);
   res.json({ ok: true });
 });
 
@@ -175,4 +174,5 @@ app.post('/api/teachers', auth, async (req, res) => {
   await u.save(); res.json(u);
 });
 
-app.listen(8080, () => console.log('>>> SERVER ON 8080'));
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log(`>>> SERVER RUNNING ON PORT ${PORT}`));
