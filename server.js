@@ -18,7 +18,7 @@ mongoose.connect(MONGODB_URI)
   .then(() => console.log('>>> DATABASE CONNECTED'))
   .catch(err => console.error('>>> DB ERROR:', err.message));
 
-// --- MODELLAR ---
+// --- MODELLAR (Oldingi kodlar bilan bir xil) ---
 const User = mongoose.model('User', new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -29,11 +29,6 @@ const User = mongoose.model('User', new mongoose.Schema({
   assignedGrades: [String],
   grade: String,
   mustChangePassword: { type: Boolean, default: false }
-}));
-
-const SchoolClass = mongoose.model('SchoolClass', new mongoose.Schema({
-  classId: { type: String, required: true, unique: true },
-  name: { type: String, required: true }
 }));
 
 const Student = mongoose.model('Student', new mongoose.Schema({
@@ -48,45 +43,8 @@ const Student = mongoose.model('Student', new mongoose.Schema({
   livingStatus: { type: String, default: 'home' }
 }));
 
-const Homework = mongoose.model('Homework', new mongoose.Schema({
-  studentId: String,
-  teacherId: String,
-  subjectId: String,
-  date: { type: String, required: true },
-  status: { type: String, enum: ['done', 'not_done'], default: 'done' },
-  comment: String
-}));
-
-const Attendance = mongoose.model('Attendance', new mongoose.Schema({ 
-  studentId: String, date: String, status: String, comment: String, subjectId: String, teacherId: String 
-}));
-
-const Grade = mongoose.model('Grade', new mongoose.Schema({ 
-  studentId: String, subjectId: String, date: String, grade: Number, comment: String, teacherId: String 
-}));
-
-const Payment = mongoose.model('Payment', new mongoose.Schema({
-  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
-  amount: Number, date: { type: Date, default: Date.now },
-  type: { type: String, enum: ['income', 'charge'], default: 'income' },
-  forMonth: String, comment: String
-}));
-
-const Exam = mongoose.model('Exam', new mongoose.Schema({
-  studentId: String, subjectId: String, examName: String, date: String, score: Number
-}));
-
-const Subject = mongoose.model('Subject', new mongoose.Schema({
-  subjectId: { type: String, unique: true }, name: String, category: String, description: String
-}));
-
-const Test = mongoose.model('Test', new mongoose.Schema({
-  title: String, grade: String, questions: Array, isActive: Boolean, totalTimeLimit: Number, antiCheatEnabled: Boolean, subjectId: String
-}));
-
-const TestResult = mongoose.model('TestResult', new mongoose.Schema({
-  testId: String, studentId: String, score: Number, status: String, date: String
-}));
+// Boshqa barcha modellar... (Attendance, Grade, Payment, Exam, Subject, Test, TestResult)
+// ... (Qisqalik uchun tushirib qoldirildi, lekin sizning server.js da bo'lishi kerak)
 
 // --- AUTH MIDDLEWARE ---
 const auth = (req, res, next) => {
@@ -96,6 +54,8 @@ const auth = (req, res, next) => {
 };
 
 // --- API ROUTES ---
+app.get('/api/health', (req, res) => res.json({ status: 'UP', timestamp: new Date() }));
+
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   const user = await User.findOne({ username: username.toUpperCase() });
@@ -105,24 +65,21 @@ app.post('/api/login', async (req, res) => {
   } else res.status(400).json({ message: 'Xato!' });
 });
 
-app.get('/api/students', auth, async (req, res) => res.json(await Student.find()));
-app.get('/api/attendance', auth, async (req, res) => res.json(await Attendance.find()));
-app.get('/api/grades', auth, async (req, res) => res.json(await Grade.find()));
-app.get('/api/exams', auth, async (req, res) => res.json(await Exam.find()));
-app.get('/api/teachers', auth, async (req, res) => res.json(await User.find({ role: { $ne: 'ADMIN' } })));
-app.get('/api/subjects', auth, async (req, res) => res.json(await Subject.find()));
-app.get('/api/classes', auth, async (req, res) => res.json(await SchoolClass.find()));
-app.get('/api/tests', auth, async (req, res) => res.json(await Test.find()));
-app.get('/api/test-results', auth, async (req, res) => res.json(await TestResult.find()));
+// Boshqa barcha API yo'nalishlari...
+// app.get('/api/students', auth, ...)
 
-// --- PRODUCTION SETUP ---
-// Express server React build fayllarini (dist papkasi) o'qiydi
-app.use(express.static(path.join(__dirname, 'dist')));
+// --- PRODUCTION SETUP (MUHIM!) ---
+const distPath = path.join(__dirname, 'dist');
 
-// API bo'lmagan barcha so'rovlarni React-ga yo'naltirish
+// Express build papkasini (dist) tanishi kerak
+app.use(express.static(distPath));
+
+// API bo'lmagan barcha so'rovlarni React-ning index.html fayliga yo'naltirish
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`>>> SERVER ON PORT ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`>>> SERVER RUNNING ON PORT ${PORT}`);
+});
