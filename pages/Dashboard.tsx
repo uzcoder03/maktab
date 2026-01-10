@@ -1,165 +1,269 @@
 
 import React, { useMemo } from 'react';
-import { AppState, User } from '../types';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Users, TrendingUp, Award, Shield, Cpu, Activity, Zap } from 'lucide-react';
+import { AppState, User, Student, DailyGrade, Exam } from '../types';
+import { 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell
+} from 'recharts';
+import { 
+  Users, TrendingUp, ShieldCheck, Activity, Cpu, Radar, Clock, Bell, UserCheck, 
+  LayoutGrid, Star, GraduationCap, Calendar, Zap, Fingerprint, Terminal, ShieldAlert,
+  ChevronRight, Bookmark
+} from 'lucide-react';
 
 interface DashboardProps {
   state: AppState;
-  user?: User | null;
+  user: User;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ state, user }) => {
-  const teacherName = user ? `${user.firstName || ''} ${user.lastName || user.username}` : "Instruktor";
-  
-  // O'qituvchiga tegishli o'quvchilarni filtrlaymiz
-  const relevantStudents = useMemo(() => {
-    if (user?.role === 'TEACHER') {
-      const assigned = user.assignedGrades || [];
-      return state.students.filter(s => assigned.includes(s.grade));
-    }
-    return state.students;
-  }, [state.students, user]);
+  const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username;
+  const isStudent = user.role === 'STUDENT';
 
-  const relevantGrades = useMemo(() => {
-    const studentIds = new Set(relevantStudents.map(s => s.id));
-    return state.dailyGrades.filter(g => studentIds.has(g.studentId));
-  }, [state.dailyGrades, relevantStudents]);
-
-  const totalStudents = relevantStudents.length;
-  
-  const averageGrade = useMemo(() => {
-    if (relevantGrades.length === 0) return 0;
-    const sum = relevantGrades.reduce((acc, curr) => acc + curr.grade, 0);
-    return (sum / relevantGrades.length).toFixed(1);
-  }, [relevantGrades]);
-
-  const todayAttendance = useMemo(() => {
+  // --- STUDENT SPECIFIC DATA ---
+  const studentData = useMemo(() => {
+    if (!isStudent) return null;
+    const myGrades = state.dailyGrades.filter(g => g.studentId === user.id);
+    const myExams = state.exams.filter(e => e.studentId === user.id);
+    const myAttendance = state.attendance.filter(a => a.studentId === user.id);
     const today = new Date().toISOString().split('T')[0];
-    const studentIds = new Set(relevantStudents.map(s => s.id));
-    const todayRecords = state.attendance.filter(a => a.date === today && studentIds.has(a.studentId));
-    
-    if (todayRecords.length === 0) return '0%';
-    const present = todayRecords.filter(r => r.status === 'present').length;
-    return `${Math.round((present / todayRecords.length) * 100)}%`;
-  }, [state.attendance, relevantStudents]);
+    const todayGrades = myGrades.filter(g => g.date === today);
 
-  const stats = [
-    { label: user?.role === 'TEACHER' ? 'Mening O\'quvchilarim' : 'Jami O\'quvchilar', value: totalStudents, icon: <Users size={24} />, color: 'from-cyan-500 to-blue-600', glow: 'shadow-cyan-500/20' },
-    { label: 'O\'rtacha Reyting', value: averageGrade, icon: <TrendingUp size={24} />, color: 'from-purple-500 to-indigo-600', glow: 'shadow-purple-500/20' },
-    { label: 'Bugungi Davomat', value: todayAttendance, icon: <Zap size={24} />, color: 'from-amber-500 to-orange-600', glow: 'shadow-amber-500/20' },
-    { label: 'Sertifikatlar', value: state.exams.length, icon: <Award size={24} />, color: 'from-emerald-500 to-teal-600', glow: 'shadow-emerald-500/20' },
-  ];
+    const gpa = myGrades.length > 0 
+      ? (myGrades.reduce((a, b) => a + b.grade, 0) / myGrades.length).toFixed(1) 
+      : '0.0';
+
+    return { myGrades, myExams, myAttendance, todayGrades, gpa };
+  }, [state, user, isStudent]);
+
+  // --- STAFF SPECIFIC DATA ---
+  const staffStats = useMemo(() => {
+    if (isStudent) return null;
+    return [
+      { label: 'O\'quvchilar', value: state.students.length, icon: <Users size={20} />, color: '#3b82f6', desc: 'Jami faol tugunlar' },
+      { label: 'Sinflar', value: state.classes.length, icon: <LayoutGrid size={20} />, color: '#6366f1', desc: 'Barcha sektorlar' },
+      { label: 'Fanlar', value: state.subjects.length, icon: <Activity size={20} />, color: '#10b981', desc: 'Akademik yo\'nalish' },
+      { label: 'Testlar', value: state.tests.length, icon: <ShieldAlert size={20} />, color: '#f59e0b', desc: 'Imtihon modullari' },
+    ];
+  }, [state, isStudent]);
+
+  const chartData = useMemo(() => {
+    if (isStudent && studentData) {
+      return studentData.myGrades.slice(-7).map(g => ({ n: g.date.split('-').slice(1).join('/'), v: g.grade }));
+    }
+    return [{n:'Dush',v:45},{n:'Sesh',v:52},{n:'Chor',v:48},{n:'Pay',v:70},{n:'Jum',v:65},{n:'Shan',v:40}];
+  }, [isStudent, studentData]);
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* Hero Welcome */}
-      <div className="relative group">
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-600/20 to-purple-600/20 blur-3xl opacity-50 group-hover:opacity-70 transition-opacity"></div>
-        <div className="relative glass-card rounded-[2.5rem] p-8 md:p-12 overflow-hidden">
-          <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
-            <Activity size={240} className="text-cyan-400" />
-          </div>
-          <div className="max-w-3xl relative z-10">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-black uppercase tracking-[0.2em] mb-6">
-              <Shield size={14} /> XODIM PLATFORMASI V 3.1.0
-            </div>
-            <h1 className="text-4xl md:text-6xl font-black text-white mb-6 leading-tight tracking-tighter">
-              Xush kelibsiz, <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">{teacherName}</span>
-            </h1>
-            <p className="text-slate-400 text-lg font-medium leading-relaxed">
-              {user?.role === 'TEACHER' 
-                ? `Bugun sizga biriktirilgan ${user.assignedGrades?.join(', ')} sinflarida darslar rejalashtirilgan. Tizim orqali davomat va baholarni nazorat qilishingiz mumkin.`
-                : "Tizim to'liq nazorat rejimida. Barcha akademik va moliyaviy o'zgarishlar audit loglariga yozib borilmoqda."}
-            </p>
-          </div>
+    <div className="space-y-8 animate-fade pb-20 mono">
+      {/* Identity Header Card */}
+      <div className="bg-[#0f172a] rounded-[3rem] p-10 border border-white/5 relative overflow-hidden shadow-2xl">
+        <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
+           <Fingerprint size={220} className="text-blue-500" />
+        </div>
+        
+        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-center gap-10">
+           <div className="flex items-center gap-8">
+              <div className="relative group">
+                 <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full group-hover:bg-blue-500/40 transition-all"></div>
+                 <div className="w-24 h-24 rounded-[2rem] bg-slate-950 border border-white/10 flex items-center justify-center text-blue-500 shadow-2xl relative z-10">
+                    {isStudent ? <GraduationCap size={44} /> : <ShieldCheck size={44} />}
+                 </div>
+              </div>
+              <div className="space-y-2">
+                 <div className="flex items-center gap-3">
+                    <h1 className="text-4xl font-black text-white tracking-tighter uppercase italic">{fullName}</h1>
+                    <span className="px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-lg text-[10px] font-black text-blue-500 uppercase tracking-widest">Verified</span>
+                 </div>
+                 <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-2 text-slate-500 font-bold text-[10px] uppercase tracking-widest">
+                       <Zap size={14} className="text-amber-500" /> Lavozim: {user.role}
+                    </div>
+                    {isStudent && (
+                       <div className="flex items-center gap-2 text-slate-500 font-bold text-[10px] uppercase tracking-widest">
+                          <Bookmark size={14} className="text-blue-500" /> Sinf: {user.grade}
+                       </div>
+                    )}
+                    <div className="flex items-center gap-2 text-slate-500 font-bold text-[10px] uppercase tracking-widest">
+                       <Terminal size={14} className="text-cyan-500" /> ID: {user.id.slice(-6).toUpperCase()}
+                    </div>
+                 </div>
+              </div>
+           </div>
+
+           <div className="flex items-center gap-6 bg-slate-950/50 p-6 rounded-[2.5rem] border border-white/5">
+              <Clock size={28} className="text-blue-500" />
+              <div>
+                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tizim Vaqti</p>
+                 <p className="text-2xl font-black text-white italic">
+                   {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                 </p>
+              </div>
+           </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, idx) => (
-          <div key={idx} className="glass-card p-6 rounded-[2rem] hover:translate-y-[-4px] transition-all duration-300 group relative">
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-4 rounded-2xl bg-gradient-to-br ${stat.color} text-white ${stat.glow} group-hover:scale-110 transition-transform`}>
-                {stat.icon}
+      {/* Main Statistics Grid */}
+      {isStudent ? (
+        /* O'quvchi uchun statistikalar */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+           <div className="bg-[#0f172a] p-8 rounded-[2.5rem] border border-white/5 hover:border-blue-500/30 transition-all shadow-xl">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">O'rtacha Ball (GPA)</p>
+              <div className="flex items-end gap-3">
+                 <p className="text-5xl font-black text-white italic">{studentData?.gpa}</p>
+                 <span className="text-emerald-500 font-bold text-xs mb-2">MAX: 5.0</span>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{stat.label}</p>
-                <p className="text-3xl font-black text-white tracking-tighter">{stat.value}</p>
+           </div>
+           <div className="bg-[#0f172a] p-8 rounded-[2.5rem] border border-white/5 hover:border-blue-500/30 transition-all shadow-xl">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Bugungi Baholar</p>
+              <div className="flex items-end gap-3">
+                 <p className="text-5xl font-black text-blue-500 italic">{studentData?.todayGrades.length}</p>
+                 <span className="text-slate-600 font-bold text-xs mb-2 italic">FAN_AKTIVLIGI</span>
               </div>
-            </div>
-            <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
-              <div className={`h-full bg-gradient-to-r ${stat.color} w-2/3`}></div>
-            </div>
-          </div>
-        ))}
-      </div>
+           </div>
+           <div className="bg-[#0f172a] p-8 rounded-[2.5rem] border border-white/5 hover:border-blue-500/30 transition-all shadow-xl">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Topshirilgan Imtihonlar</p>
+              <div className="flex items-end gap-3">
+                 <p className="text-5xl font-black text-indigo-500 italic">{studentData?.myExams.length}</p>
+                 <span className="text-slate-600 font-bold text-xs mb-2 italic">TOTAL_EXAMS</span>
+              </div>
+           </div>
+           <div className="bg-[#0f172a] p-8 rounded-[2.5rem] border border-white/5 hover:border-blue-500/30 transition-all shadow-xl">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Davomat Darajasi</p>
+              <div className="flex items-end gap-3">
+                 <p className="text-5xl font-black text-emerald-500 italic">
+                    {studentData?.myAttendance.length > 0 
+                      ? Math.round((studentData.myAttendance.filter(a => a.status === 'present').length / studentData.myAttendance.length) * 100) 
+                      : 0}%
+                 </p>
+                 <span className="text-slate-600 font-bold text-xs mb-2 italic">PRESENCE</span>
+              </div>
+           </div>
+        </div>
+      ) : (
+        /* Xodimlar uchun statistikalar */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+           {staffStats?.map((s, i) => (
+             <div key={i} className="bg-[#0f172a] p-8 rounded-[2.5rem] border border-white/5 hover:border-blue-500/30 transition-all shadow-xl group">
+               <div className="flex items-center justify-between mb-8">
+                 <div className="p-4 rounded-2xl bg-white/5 text-blue-500 border border-white/5 group-hover:scale-110 transition-transform">
+                   {s.icon}
+                 </div>
+                 <Activity size={14} className="text-slate-800" />
+               </div>
+               <h4 className="text-4xl font-black text-white mb-1 tracking-tight italic">{s.value}</h4>
+               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{s.label}</p>
+               <p className="text-[8px] font-bold text-slate-700 mt-2 italic">PROTOCOL: {s.desc.toUpperCase()}</p>
+             </div>
+           ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Activity Chart */}
-        <div className="lg:col-span-2 glass-card p-8 rounded-[2.5rem]">
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <h3 className="text-xl font-black text-white tracking-tight">O'zlashtirish Dinamikasi</h3>
-              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Sizga biriktirilgan guruhlar auditi</p>
-            </div>
-          </div>
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={[
-                { name: 'Dush', g: 3.8 }, { name: 'Sesh', g: 4.2 }, { name: 'Chor', g: 4.0 }, 
-                { name: 'Pay', g: 4.8 }, { name: 'Jum', g: 4.5 }, { name: 'Shan', g: 4.9 }
-              ]}>
-                <defs>
-                  <linearGradient id="cyberGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#22d3ee" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#475569', fontSize: 11, fontWeight: 800}} />
-                <YAxis domain={[0, 5]} axisLine={false} tickLine={false} tick={{fill: '#475569', fontSize: 11, fontWeight: 800}} />
-                <Tooltip 
-                  contentStyle={{ background: '#0f172a', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', color: '#fff' }} 
-                  itemStyle={{ fontWeight: '900', color: '#22d3ee' }}
-                />
-                <Area type="monotone" dataKey="g" stroke="#22d3ee" strokeWidth={5} fillOpacity={1} fill="url(#cyberGradient)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+        {/* Academic Activity Chart */}
+        <div className="lg:col-span-2 bg-[#0f172a] rounded-[3rem] p-10 border border-white/5 shadow-2xl overflow-hidden relative">
+           <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none">
+              <Radar size={150} className="text-blue-500" />
+           </div>
+           <div className="flex justify-between items-center mb-12 relative z-10">
+              <div>
+                 <h3 className="text-xl font-black text-white italic uppercase tracking-tight flex items-center gap-3">
+                    <TrendingUp size={20} className="text-blue-500" /> Akademik Faollik_Grafiki
+                 </h3>
+                 <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mt-1">Oxirgi topshirilgan natijalar tahlili</p>
+              </div>
+           </div>
+           <div className="h-[350px] w-full relative z-10">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis dataKey="n" stroke="#475569" fontSize={10} axisLine={false} tickLine={false} dy={15} />
+                  <YAxis stroke="#475569" fontSize={10} axisLine={false} tickLine={false} dx={-10} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '20px', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }}
+                    itemStyle={{ color: '#3b82f6' }}
+                  />
+                  <Area type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={4} fillOpacity={1} fill="url(#colorVal)" />
+                </AreaChart>
+              </ResponsiveContainer>
+           </div>
         </div>
 
-        {/* Logs */}
-        <div className="flex flex-col gap-6">
-          <div className="glass-card p-8 rounded-[2.5rem] flex-1">
-            <div className="bg-cyan-500/10 w-fit p-4 rounded-2xl mb-6 border border-cyan-500/20">
-              <Cpu size={28} className="text-cyan-400" />
-            </div>
-            <h3 className="text-xl font-black text-white mb-6">Tizim Bildirishnomalari</h3>
-            <div className="space-y-6">
-              {[
-                { time: 'Hozir', msg: 'Tizim barqaror ishlamoqda', type: 'info' },
-                { time: 'Bugun', msg: 'Davomat protokollari yangilandi', type: 'success' },
-                { time: 'Kecha', msg: 'Xavfsizlik sertifikati tasdiqlandi', type: 'info' }
-              ].map((log, i) => (
-                <div key={i} className="flex gap-4 group">
-                  <div className="text-[10px] font-black text-slate-600 mono pt-1">{log.time}</div>
-                  <div className="flex-1 text-xs font-bold text-slate-400 group-hover:text-slate-200 transition-colors">{log.msg}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-            <div className="absolute -right-4 -bottom-4 opacity-20">
-              <Zap size={120} className="text-white" />
-            </div>
-            <h4 className="text-lg font-black text-white mb-2">Tezkor Vazifa</h4>
-            <p className="text-indigo-100 text-xs font-medium mb-6 opacity-80">Bugun barcha o'quvchilarning choraklik baholarini yakunlang.</p>
-            <button className="w-full py-3 bg-white text-indigo-600 font-black rounded-xl text-[10px] uppercase tracking-widest hover:scale-105 transition-all">Auditni Tekshirish</button>
-          </div>
+        {/* Right Section: Student Grades or System Logs */}
+        <div className="bg-[#0f172a] rounded-[3rem] p-10 border border-white/5 shadow-2xl flex flex-col">
+           <h3 className="text-xl font-black text-white mb-10 flex items-center gap-3 italic uppercase">
+              {isStudent ? <Star size={20} className="text-blue-500" /> : <Bell size={20} className="text-blue-500" />}
+              {isStudent ? 'Bugungi_Natijalar' : 'Tizim_Loglari'}
+           </h3>
+           
+           <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-2">
+              {isStudent ? (
+                /* O'quvchining bugungi baholari */
+                studentData?.todayGrades.length ? studentData.todayGrades.map((g, i) => (
+                  <div key={i} className="p-5 bg-slate-950/50 border border-white/5 rounded-3xl group hover:border-blue-500/20 transition-all">
+                     <div className="flex justify-between items-center mb-1">
+                        <div>
+                           <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest italic">
+                              {state.subjects.find(s => s.subjectId === g.subjectId)?.name || 'Noma\'lum fan'}
+                           </p>
+                           <p className="text-xs font-bold text-white mt-1">Kunlik baholash</p>
+                        </div>
+                        <div className="text-2xl font-black text-white italic">{g.grade}</div>
+                     </div>
+                  </div>
+                )) : (
+                  <div className="h-full flex flex-col items-center justify-center opacity-20 py-10">
+                     <Activity size={48} className="mb-4" />
+                     <p className="text-[10px] font-black uppercase tracking-widest text-center">Bugun baholar kiritilmadi</p>
+                  </div>
+                )
+              ) : (
+                /* Xodimlar uchun loglar */
+                [
+                  { t: 'Davomat audit yakunlandi', time: '10:12', type: 'info', icon: <UserCheck size={14}/> },
+                  { t: 'Yangi test moduli yaratildi', time: '09:45', type: 'success', icon: <Zap size={14}/> },
+                  { t: 'Firewall yangilanishi', time: 'Kecha', type: 'system', icon: <ShieldCheck size={14}/> },
+                  { t: 'Yangi xodim qo\'shildi', time: '2 kun oldin', type: 'access', icon: <Users size={14}/> },
+                ].map((l, i) => (
+                  <div key={i} className="p-5 bg-slate-950/50 border border-white/5 rounded-3xl hover:bg-blue-500/5 transition-all group cursor-pointer">
+                     <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-3">
+                           <div className="text-blue-500">{l.icon}</div>
+                           <span className="text-[11px] font-black text-slate-300 group-hover:text-blue-400 transition-colors uppercase italic">{l.t}</span>
+                        </div>
+                        <span className="text-[9px] font-black text-slate-700 mono">{l.time}</span>
+                     </div>
+                     <div className="text-[8px] font-black text-blue-500/30 uppercase tracking-[0.2em] italic pl-7">{l.type}_ENCRYPTED</div>
+                  </div>
+                ))
+              )}
+           </div>
+
+           <button className="mt-10 w-full py-5 bg-white/5 text-slate-500 font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3 italic">
+              Barcha_Ma'lumotlar <ChevronRight size={14} />
+           </button>
         </div>
+      </div>
+
+      {/* Footer System Status (Mini Cards) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+         {[
+           { label: 'Security', value: 'ACTIVE', color: 'emerald' },
+           { label: 'Network', value: 'SECURE', color: 'blue' },
+           { label: 'Database', value: 'SYNCED', color: 'cyan' },
+           { label: 'Latency', value: '12ms', color: 'indigo' }
+         ].map((item, i) => (
+           <div key={i} className="bg-slate-900/40 border border-white/5 p-4 rounded-2xl flex items-center justify-between">
+              <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">{item.label}</span>
+              <span className={`text-[9px] font-black text-${item.color}-500 uppercase italic`}>{item.value}</span>
+           </div>
+         ))}
       </div>
     </div>
   );

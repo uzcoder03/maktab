@@ -1,6 +1,7 @@
 
 import { AppState } from './types';
 
+// Fix: Added missing 'testResults' property to satisfy AppState interface requirements
 export const initialMockState: AppState = {
   students: [],
   attendance: [],
@@ -8,6 +9,12 @@ export const initialMockState: AppState = {
   exams: [],
   teachers: [],
   subjects: [],
+  classes: [],
   clubMemberships: [],
-  clubName: 'Cyber To\'garak'
+  clubName: 'Cyber To\'garak',
+  homework: [],
+  clubAttendance: [],
+  clubGrades: [],
+  tests: [],
+  testResults: []
 };

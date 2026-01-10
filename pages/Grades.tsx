@@ -1,234 +1,244 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Student, DailyGrade, Attendance, User } from '../types';
-import { Star, Calendar, Save, Search, Lock, UserX, ShieldCheck } from 'lucide-react';
-import { CLASSES } from '../constants';
+import { Student, DailyGrade, Attendance, User, Homework } from '../types';
+import { Star, Calendar, Save, Search, Lock, UserX, ShieldCheck, ClipboardCheck, AlertCircle, CheckCircle, FileText, Activity } from 'lucide-react';
 
 interface GradesProps {
   students: Student[];
   grades: DailyGrade[];
+  homework: Homework[];
   attendance: Attendance[];
-  setGrades: (grades: DailyGrade[]) => void;
+  classes: string[];
+  setGrades: (grades: any[]) => Promise<void>;
+  setHomework: (hw: any[]) => Promise<void>;
   user?: User | null;
 }
 
-const Grades: React.FC<GradesProps> = ({ students, grades, attendance, setGrades, user }) => {
+const Grades: React.FC<GradesProps> = ({ students, grades, homework, attendance, classes, setGrades, setHomework, user }) => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const teacherGrades = user?.role === 'TEACHER' ? user.assignedGrades || [] : CLASSES;
-  const [selectedClass, setSelectedClass] = useState(teacherGrades[0] || '9-A');
+  const teacherGrades = useMemo(() => user?.role === 'TEACHER' ? user.assignedGrades || [] : classes, [user, classes]);
+  const [selectedClass, setSelectedClass] = useState(teacherGrades[0] || '');
   const [search, setSearch] = useState('');
-  const [tempGrades, setTempGrades] = useState<Record<string, { grade: number, comment: string, isLocked: boolean, isAbsent: boolean }>>({});
+  
+  // Faqat tanlangan sinf o'quvchilari uchun vaqtinchalik data
+  const [tempData, setTempData] = useState<Record<string, { grade: number, hwStatus: 'done' | 'not_done', comment: string, isLocked: boolean, isAbsent: boolean }>>({});
 
+  // Tanlangan sinf o'quvchilari
+  const classStudents = useMemo(() => {
+    return students.filter(s => s.grade === selectedClass);
+  }, [students, selectedClass]);
+
+  // Har safar sinf yoki sana o'zgarganda tempData ni yangilaymiz
   useEffect(() => {
-    const existingDayGrades: Record<string, { grade: number, comment: string, isLocked: boolean, isAbsent: boolean }> = {};
+    const initial: Record<string, { grade: number, hwStatus: 'done' | 'not_done', comment: string, isLocked: boolean, isAbsent: boolean }> = {};
     
-    // 1. Joriy sana va o'qituvchining fani (specialization) bo'yicha baholarni filtrlaymiz
-    const dayGrades = grades.filter(g => {
-      const isSameDate = g.date === selectedDate;
-      if (user?.role === 'TEACHER') {
-        return isSameDate && g.subjectId === user.specialization;
-      }
-      return isSameDate;
-    });
+    // Faqat joriy sinf va sana uchun bazadagi ma'lumotlarni filtrlaymiz
+    const dayGrades = grades.filter(g => g.date === selectedDate && (user?.role === 'TEACHER' ? g.subjectId === user.specialization : true));
+    const dayHW = homework.filter(h => h.date === selectedDate && (user?.role === 'TEACHER' ? h.subjectId === user.specialization : true));
+    const dayAtt = attendance.filter(a => a.date === selectedDate);
 
-    // 2. O'qituvchining fani bo'yicha o'sha kungi davomatni filtrlaymiz
-    const dayAttendance = attendance.filter(a => {
-      const isSameDate = a.date === selectedDate;
-      if (user?.role === 'TEACHER') {
-        // @ts-ignore
-        return isSameDate && a.subjectId === user.specialization;
-      }
-      return isSameDate;
-    });
-    
-    students.forEach(s => {
-      const gradeRec = dayGrades.find(g => g.studentId === s.id);
-      const attRec = dayAttendance.find(a => a.studentId === s.id);
+    classStudents.forEach(s => {
+      const g = dayGrades.find(x => x.studentId === s.id);
+      const h = dayHW.find(x => x.studentId === s.id);
+      const a = dayAtt.find(x => x.studentId === s.id);
       
-      existingDayGrades[s.id] = { 
-        grade: gradeRec?.grade || 0, 
-        comment: gradeRec?.comment || '',
-        isLocked: !!gradeRec && user?.role === 'TEACHER',
-        isAbsent: attRec?.status === 'absent'
+      initial[s.id] = { 
+        grade: g?.grade || 0, 
+        hwStatus: h?.status || 'done', 
+        comment: g?.comment || h?.comment || '', 
+        isLocked: !!g && user?.role === 'TEACHER', // Faqat o'qituvchi uchun lock
+        isAbsent: a?.status === 'absent' 
       };
     });
-    setTempGrades(existingDayGrades);
-  }, [selectedDate, grades, attendance, students, user]);
+    setTempData(initial);
+  }, [selectedDate, selectedClass, grades, homework, attendance, classStudents, user]);
 
   const filteredStudents = useMemo(() => {
-    return students.filter(s => s.grade === selectedClass && `${s.firstName} ${s.lastName}`.toLowerCase().includes(search.toLowerCase()));
-  }, [students, selectedClass, search]);
+    return classStudents.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(search.toLowerCase()));
+  }, [classStudents, search]);
 
-  const handleGradeChange = (studentId: string, grade: number) => {
-    const current = tempGrades[studentId];
-    if (current?.isLocked || current?.isAbsent) return;
-    setTempGrades(prev => ({
-      ...prev,
-      [studentId]: { ...prev[studentId], grade }
-    }));
+  const handleUpdate = (sid: string, updates: any) => {
+    if (tempData[sid]?.isLocked || tempData[sid]?.isAbsent) return;
+    setTempData(prev => ({ ...prev, [sid]: { ...prev[sid], ...updates } }));
   };
 
-  const handleCommentChange = (studentId: string, comment: string) => {
-    const current = tempGrades[studentId];
-    if (current?.isLocked || current?.isAbsent) return;
-    setTempGrades(prev => ({
-      ...prev,
-      [studentId]: { ...prev[studentId], comment }
-    }));
-  };
+  const handleSaveClass = async () => {
+    const gradeRecs = [];
+    const hwRecs = [];
+    
+    // Faqat joriy sinf o'quvchilarini saqlaymiz
+    for (const student of classStudents) {
+      const data = tempData[student.id];
+      if (data && !data.isLocked && !data.isAbsent) {
+        if (data.grade > 0) {
+          gradeRecs.push({ 
+            studentId: student.id, 
+            date: selectedDate, 
+            grade: data.grade, 
+            comment: data.comment, 
+            subjectId: user?.specialization 
+          });
+        }
+        hwRecs.push({ 
+          studentId: student.id, 
+          date: selectedDate, 
+          status: data.hwStatus, 
+          comment: data.comment, 
+          subjectId: user?.specialization 
+        });
+      }
+    }
 
-  const handleSave = async () => {
-    if (user?.role === 'TEACHER' && !user.specialization) {
-      alert("Sizga fan biriktirilmagan!");
+    if (gradeRecs.length === 0 && hwRecs.length === 0) {
+      alert("Saqlash uchun yangi ma'lumot yo'q!");
       return;
     }
 
-    const recordsToSave = Object.entries(tempGrades)
-      .filter(([studentId, data]) => {
-         const student = students.find(s => s.id === studentId);
-         return student && student.grade === selectedClass && data.grade > 0 && !data.isLocked && !data.isAbsent;
-      })
-      .map(([studentId, data]) => ({
-        studentId,
-        date: selectedDate,
-        grade: data.grade,
-        comment: data.comment,
-        subjectId: user?.specialization
-      }));
-
-    if (recordsToSave.length === 0) {
-      alert("Yangi saqlanadigan baholar yo'q.");
-      return;
+    try {
+      if (gradeRecs.length > 0) await setGrades(gradeRecs);
+      if (hwRecs.length > 0) await setHomework(hwRecs);
+      alert(`${selectedClass} SINF NATIJALARI SAQLANDI!`);
+    } catch (err) {
+      alert("Xatolik yuz berdi!");
     }
-    await setGrades(recordsToSave as any);
   };
+
+  // Qaysi sinflar to'liq baholab bo'linganini aniqlash
+  const completedClasses = useMemo(() => {
+    return teacherGrades.filter(c => {
+      const studentsInClass = students.filter(s => s.grade === c);
+      if (studentsInClass.length === 0) return false;
+      return studentsInClass.every(s => 
+        grades.some(g => g.studentId === s.id && g.date === selectedDate && g.subjectId === user?.specialization) ||
+        attendance.some(a => a.studentId === s.id && a.date === selectedDate && a.status === 'absent')
+      );
+    });
+  }, [teacherGrades, students, grades, attendance, selectedDate, user]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="glass-card p-8 rounded-[2.5rem] flex flex-col lg:flex-row items-center justify-between gap-6 border-amber-500/20">
-        <div className="flex flex-wrap items-center gap-6 w-full lg:w-auto">
-          <div className="flex items-center gap-4">
-             <div className="p-4 bg-amber-500/10 rounded-2xl text-amber-500 border border-amber-500/20">
-               <Calendar size={24} />
-             </div>
-             <div>
-               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sana</p>
-               <input 
-                 type="date" 
-                 value={selectedDate}
-                 onChange={(e) => setSelectedDate(e.target.value)}
-                 className="bg-transparent text-white font-black text-xl outline-none cursor-pointer focus:text-amber-500 transition-colors"
-               />
-             </div>
-          </div>
-          
-          <div className="flex flex-col">
-             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Sektor va Fan</p>
-             <div className="flex items-center gap-3">
-                <select 
-                  value={selectedClass}
-                  onChange={(e) => setSelectedClass(e.target.value)}
-                  className="bg-slate-900 border border-white/10 rounded-2xl px-6 py-2 text-amber-500 font-black outline-none appearance-none cursor-pointer"
-                >
-                  {teacherGrades.map(c => <option key={c} value={c}>{c} Sinf</option>)}
-                </select>
-                {user?.role === 'TEACHER' && (
-                  <div className="px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2">
-                    <ShieldCheck size={14} /> {user.specialization}
-                  </div>
-                )}
-             </div>
-          </div>
+    <div className="space-y-6 animate-fade mono pb-32">
+      <div className="bg-[#0f172a] rounded-[2.5rem] p-8 border border-white/5 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none">
+           <Activity size={150} className="text-indigo-500" />
+        </div>
+        
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 relative z-10">
+           <div>
+              <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter flex items-center gap-3">
+                <ClipboardCheck className="text-indigo-500" /> Akademik_LOG
+              </h2>
+              <div className="flex items-center gap-3 mt-2">
+                 <span className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-[10px] font-black text-indigo-400 uppercase tracking-widest italic">{user?.specialization}</span>
+                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{selectedDate}</span>
+              </div>
+           </div>
+
+           <button 
+             onClick={handleSaveClass}
+             className="w-full md:w-auto px-10 py-5 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 active:scale-95 transition-all shadow-xl shadow-indigo-600/20 uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-3"
+           >
+             <Save size={18} /> COMMIT_{selectedClass.replace('-', '_')}
+           </button>
         </div>
 
-        <div className="flex items-center gap-4 w-full lg:w-auto">
-          <div className="relative flex-1 lg:w-80 group">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-amber-500" size={20} />
-            <input 
-              type="text" 
-              placeholder="Agent qidirish..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-950 border border-white/10 rounded-2xl pl-14 pr-6 py-4 text-white font-bold outline-none focus:border-amber-500/50 transition-all"
-            />
-          </div>
-          <button 
-            onClick={handleSave}
-            className="px-8 py-4 bg-amber-500 text-black font-black rounded-2xl hover:scale-105 transition-all shadow-lg shadow-amber-500/20 uppercase tracking-widest text-xs flex items-center gap-2"
-          >
-            <Save size={18} /> Saqlash
-          </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+           <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-white/5">
+              <Calendar size={18} className="text-indigo-400" />
+              <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent text-white font-black text-xs outline-none uppercase w-full" />
+           </div>
+           <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-white/5">
+              <Search size={18} className="text-slate-500" />
+              <input type="text" placeholder="AGENT_QIDIRUV..." value={search} onChange={(e) => setSearch(e.target.value)} className="bg-transparent text-white font-black text-xs outline-none uppercase w-full" />
+           </div>
+        </div>
+
+        {/* Improved Class Selector */}
+        <div className="flex gap-3 overflow-x-auto pb-2 mt-8 custom-scrollbar">
+           {teacherGrades.map(c => (
+             <button 
+               key={c} onClick={() => setSelectedClass(c)}
+               className={`relative px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] whitespace-nowrap border transition-all flex items-center gap-3 ${selectedClass === c ? 'bg-indigo-600 text-white border-indigo-400 shadow-xl' : 'bg-slate-950 text-slate-500 border-white/5 hover:border-white/10'}`}
+             >
+               {c} SINF
+               {completedClasses.includes(c) && <CheckCircle size={14} className="text-emerald-500" />}
+             </button>
+           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredStudents.map(student => {
-          const current = tempGrades[student.id] || { grade: 0, comment: '', isLocked: false, isAbsent: false };
-          const isBlocked = current.isLocked || current.isAbsent;
-
+          const data = tempData[student.id] || { grade: 0, hwStatus: 'done', comment: '', isLocked: false, isAbsent: false };
+          const isSaved = data.isLocked;
+          
           return (
-            <div key={student.id} className={`glass-card p-8 rounded-[3rem] relative group border-indigo-500/10 transition-all ${isBlocked ? 'opacity-50 grayscale-[0.3]' : 'hover:border-indigo-500/30 shadow-xl shadow-indigo-500/5'}`}>
-              <div className="flex items-center gap-4 mb-8">
-                <div className={`w-16 h-16 rounded-2xl bg-slate-950 border border-white/5 flex items-center justify-center font-black text-xl ${current.isAbsent ? 'text-rose-500' : 'text-indigo-400'}`}>
-                  {current.isAbsent ? <UserX size={28} /> : student.firstName[0]}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-black text-white text-lg tracking-tight group-hover:text-indigo-400 transition-colors">{student.firstName} {student.lastName}</h4>
-                    <div className="flex gap-2">
-                       {current.isLocked && <Lock size={14} className="text-slate-500" />}
-                       {current.isAbsent && <span className="px-2 py-0.5 bg-rose-500 text-white text-[8px] font-black rounded uppercase tracking-tighter">OFFLINE</span>}
+            <div key={student.id} className={`bg-[#0f172a] rounded-[2.5rem] p-8 border transition-all relative overflow-hidden group ${data.isAbsent ? 'opacity-30' : isSaved ? 'border-indigo-500/20' : 'border-white/5 hover:border-white/10'}`}>
+              
+              <div className="flex items-center justify-between mb-8">
+                 <div className="flex items-center gap-4">
+                    <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center font-black text-xl transition-all ${isSaved ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400' : 'bg-slate-950 border-white/5 text-slate-500'}`}>
+                       {student.firstName[0]}
                     </div>
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mono">{student.studentId}</p>
-                </div>
+                    <div>
+                       <h4 className="font-black text-white text-sm tracking-tight uppercase italic">{student.firstName} {student.lastName}</h4>
+                       <p className="text-[9px] text-slate-600 font-bold uppercase mono">{student.studentId}</p>
+                    </div>
+                 </div>
+                 {isSaved && <div className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-lg text-[8px] font-black uppercase tracking-widest border border-emerald-500/20">Saved</div>}
+                 {data.isAbsent && <div className="px-3 py-1 bg-rose-500/10 text-rose-500 rounded-lg text-[8px] font-black uppercase tracking-widest border border-rose-500/20">Absent</div>}
               </div>
 
               <div className="space-y-6">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">O'zlashtirish Bahosi</p>
-                    {current.isAbsent && <p className="text-[9px] font-bold text-rose-400 italic">Darsda yo'q</p>}
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    {[1, 2, 3, 4, 5].map(num => (
-                      <button
-                        key={num}
-                        disabled={isBlocked}
-                        onClick={() => handleGradeChange(student.id, num)}
-                        className={`flex-1 aspect-square rounded-2xl flex items-center justify-center font-black text-lg transition-all border-2 ${
-                          current.grade === num 
-                            ? 'bg-indigo-500 text-white border-indigo-400 shadow-lg' 
-                            : 'bg-slate-950 text-slate-600 border-white/5 hover:border-indigo-500/30'
-                        } ${isBlocked && current.grade !== num ? 'cursor-not-allowed opacity-20' : ''}`}
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
+                <div className="space-y-3">
+                   <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest ml-1">Homework_Status</p>
+                   <div className="flex gap-2">
+                      <button 
+                        disabled={isSaved || data.isAbsent}
+                        onClick={() => handleUpdate(student.id, { hwStatus: 'done' })}
+                        className={`flex-1 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${data.hwStatus === 'done' ? 'bg-emerald-500 text-black' : 'bg-slate-950 text-slate-700 border border-white/5'}`}
+                      >Done</button>
+                      <button 
+                        disabled={isSaved || data.isAbsent}
+                        onClick={() => handleUpdate(student.id, { hwStatus: 'not_done' })}
+                        className={`flex-1 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${data.hwStatus === 'not_done' ? 'bg-rose-500 text-white' : 'bg-slate-950 text-slate-700 border border-white/5'}`}
+                      >Fail</button>
+                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Protokol Izohi</p>
-                  {isBlocked ? (
-                     <div className="p-4 bg-slate-950 rounded-2xl border border-white/5 text-slate-500 text-xs italic font-medium flex items-center gap-2">
-                       {current.isAbsent ? <UserX size={14} /> : <Lock size={14} />}
-                       {current.isAbsent ? "Agent darsda qatnashmadi." : (current.comment || "Audit tasdiqlangan.")}
-                     </div>
-                  ) : (
-                    <textarea 
-                      rows={2}
-                      placeholder="Baholash izohi..."
-                      className="w-full bg-slate-950 border border-white/10 rounded-2xl px-5 py-3 text-sm text-white outline-none focus:border-indigo-500/30 transition-all resize-none font-medium placeholder:text-slate-700"
-                      value={current.comment}
-                      onChange={(e) => handleCommentChange(student.id, e.target.value)}
-                    />
-                  )}
+                <div className="space-y-3">
+                   <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest ml-1">Academic_Grade (1-5)</p>
+                   <div className="grid grid-cols-5 gap-2">
+                      {[1, 2, 3, 4, 5].map(num => (
+                        <button 
+                          key={num} 
+                          disabled={isSaved || data.isAbsent}
+                          onClick={() => handleUpdate(student.id, { grade: num })}
+                          className={`aspect-square rounded-xl font-black text-sm transition-all border ${data.grade === num ? 'bg-indigo-600 text-white border-indigo-400 shadow-lg shadow-indigo-600/20' : 'bg-slate-950 text-slate-700 border-white/5 hover:border-white/10'}`}
+                        >{num}</button>
+                      ))}
+                   </div>
+                </div>
+
+                <div className="pt-2">
+                   <input 
+                     type="text" placeholder="LOG_IZOH..." disabled={isSaved || data.isAbsent}
+                     value={data.comment} onChange={(e) => handleUpdate(student.id, { comment: e.target.value })}
+                     className="w-full bg-slate-950 border border-white/5 rounded-xl px-4 py-3 text-[10px] text-white outline-none focus:border-indigo-500/40 font-black uppercase tracking-wider italic"
+                   />
                 </div>
               </div>
+              
+              {isSaved && <div className="absolute top-4 right-4 text-indigo-500/30 rotate-12"><Lock size={80} /></div>}
             </div>
           );
         })}
+        
+        {filteredStudents.length === 0 && (
+          <div className="col-span-full py-20 bg-slate-900/40 rounded-[3rem] border border-dashed border-white/5 flex flex-col items-center justify-center opacity-30">
+             <AlertCircle size={48} className="mb-4" />
+             <p className="text-xs font-black uppercase tracking-widest">Sinfda o'quvchilar topilmadi</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,18 +1,16 @@
 
 {
-  "name": "edu-control-vps",
-  "version": "1.1.0",
-  "description": "Maktab o'qituvchilari uchun professional admin panel OS",
+  "name": "cybershield-school-os",
+  "version": "1.2.0",
+  "description": "Maktab o'qituvchilari va adminlari uchun professional OS",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "server": "nodemon server.js",
     "client": "vite",
-    "dev": "npm run server & npm run client",
+    "dev": "npx concurrently \"npm run server\" \"npm run client\"",
     "build": "vite build",
-    "prod": "npm run build && pm2 start ecosystem.config.js --env production",
-    "stop": "pm2 stop edu-control",
-    "logs": "pm2 logs edu-control"
+    "preview": "vite preview"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -26,12 +24,14 @@
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "recharts": "^2.12.0"
+    "recharts": "^3.6.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
     "nodemon": "^3.0.1",
     "typescript": "^5.3.3",
-    "vite": "^5.0.12"
+    "vite": "^5.0.12",
+    "concurrently": "^8.2.2"
   }
 }

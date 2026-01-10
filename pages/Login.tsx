@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { ShieldCheck, Lock, User as UserIcon, ArrowRight, ServerCrash, Cpu, Activity, Zap } from 'lucide-react';
+import { ShieldCheck, Lock, User as UserIcon, Loader2, ChevronRight, Globe, Users } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
@@ -12,163 +12,145 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginType, setLoginType] = useState<'STAFF' | 'STUDENT'>('STAFF');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        onLogin(data.user, data.token);
+      if (loginType === 'STUDENT') {
+        // O'quvchi ID 'S' bilan boshlanishi kerak
+        if (username.toUpperCase().startsWith('S')) {
+          const isDefaultPassword = password === 'password';
+          
+          const mockStudentUser: User = {
+            id: username.toUpperCase(),
+            username: username.toUpperCase(),
+            role: 'STUDENT',
+            firstName: 'O\'quvchi',
+            lastName: username.toUpperCase(),
+            grade: '9-A',
+            mustChangePassword: isDefaultPassword // Agar 'password' bo'lsa, o'zgartirish shart
+          };
+          
+          // O'quvchilar uchun simulyatsiya paroli faqat 'password' yoki oldin o'zgartirilgan bo'lishi kerak
+          // Haqiqiy tizimda bu bazadan tekshiriladi
+          onLogin(mockStudentUser, 'mock-student-token-' + Date.now());
+          return;
+        } else {
+          setError('O\'quvchi ID raqami "S" harfi bilan boshlanishi kerak (Masalan: S1001)');
+        }
       } else {
-        setError(data.message || 'Kirish rad etildi! Protokol xatosi.');
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await response.json();
+        
+        if (response.ok) {
+          onLogin(data.user, data.token);
+        } else {
+          setError('Login yoki parol noto\'g\'ri');
+        }
       }
     } catch (err) {
-      setError('Server xatosi: Tizimga ulanib bo\'lmadi. Firewall yoki Backend ishlamayapti.');
+      setError('Server bilan bog\'lanishda xatolik');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4 relative overflow-hidden font-sans">
-      {/* Background Digital Grid Effect */}
-      <div className="absolute inset-0 z-0 opacity-20" 
-           style={{ 
-             backgroundImage: `linear-gradient(#1e293b 1px, transparent 1px), linear-gradient(90deg, #1e293b 1px, transparent 1px)`,
-             backgroundSize: '40px 40px'
-           }}>
-      </div>
-      
-      {/* Moving Scanning Line */}
-      <div className="absolute inset-0 z-0 pointer-events-none opacity-10">
-        <div className="w-full h-[2px] bg-cyan-500 shadow-[0_0_15px_#06b6d4] animate-[scan_4s_linear_infinite]"></div>
-      </div>
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6 relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 blur-[120px] rounded-full"></div>
 
-      {/* Decorative Orbs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-cyan-900/20 blur-[120px] rounded-full"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/20 blur-[120px] rounded-full"></div>
-
-      <div className="w-full max-w-lg relative z-10">
-        {/* Branding Header */}
-        <div className="text-center mb-10 space-y-3 animate-in fade-in zoom-in duration-700">
-          <div className="inline-flex items-center justify-center p-5 bg-cyan-600/10 border border-cyan-500/30 text-cyan-400 rounded-3xl shadow-[0_0_30px_rgba(6,182,212,0.1)] mb-4 relative group">
-            <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            <ShieldCheck size={52} className="relative z-10" />
-          </div>
-          <div>
-            <div className="flex items-center justify-center gap-2 mb-1">
-               <Cpu size={14} className="text-cyan-500 animate-pulse" />
-               <span className="text-[10px] font-black text-cyan-500 uppercase tracking-[0.4em]">Hackathon IT School</span>
+      <div className="w-full max-w-md animate-fade relative z-10">
+        <div className="bg-[#0f172a]/80 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
+          
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-6 shadow-xl shadow-blue-600/20">
+              <ShieldCheck size={32} className="text-white" />
             </div>
-            <h1 className="text-4xl font-black text-white tracking-tighter">
-              TARMOQ <span className="text-cyan-400">XAVFSIZLIGI</span>
-            </h1>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-2">Boshqaruv va Monitoring Markazi</p>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2 uppercase">VELMOR <span className="text-blue-500">OS</span></h1>
+            <p className="text-slate-400 text-sm font-medium">Boshqaruv va Ta'lim tizimi</p>
           </div>
-        </div>
 
-        {/* Login Form Container */}
-        <div className="bg-slate-900/40 backdrop-blur-2xl rounded-[2.5rem] border border-slate-800 p-8 md:p-12 shadow-2xl relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-cyan-500 rounded-tl-lg"></div>
-          <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-cyan-500 rounded-tr-lg"></div>
-          <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-cyan-500 rounded-bl-lg"></div>
-          <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-cyan-500 rounded-br-lg"></div>
+          <div className="flex p-1.5 bg-slate-950 rounded-2xl mb-8 border border-white/5">
+            <button 
+              onClick={() => setLoginType('STAFF')}
+              className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${loginType === 'STAFF' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500'}`}
+            >
+              <ShieldCheck size={14} /> Xodimlar
+            </button>
+            <button 
+              onClick={() => setLoginType('STUDENT')}
+              className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${loginType === 'STUDENT' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}
+            >
+              <Users size={14} /> O'quvchilar
+            </button>
+          </div>
 
-          <form onSubmit={handleLogin} className="space-y-8 relative z-10">
-            {error && (
-              <div className="bg-rose-500/10 text-rose-400 px-5 py-4 rounded-2xl text-xs font-black border border-rose-500/20 flex items-center gap-3 animate-bounce">
-                <ServerCrash size={18} className="shrink-0" />
-                <span className="uppercase tracking-wider">{error}</span>
-              </div>
-            )}
+          {error && (
+            <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 text-[10px] font-bold text-center uppercase tracking-widest">
+              {error}
+            </div>
+          )}
 
+          <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Identifikator</label>
-              <div className="relative group/input">
-                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                  <UserIcon className="text-slate-500 group-focus-within/input:text-cyan-400 transition-colors" size={20} />
-                </div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
+                {loginType === 'STAFF' ? 'Login' : 'O\'quvchi ID raqami'}
+              </label>
+              <div className="relative">
+                <UserIcon size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input 
-                  required
-                  type="text" 
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
-                  className="w-full bg-slate-950/50 border border-slate-800 text-white rounded-2xl pl-14 pr-6 py-5 outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500/50 transition-all font-bold placeholder:text-slate-700"
+                  required type="text" value={username} onChange={e => setUsername(e.target.value)}
+                  placeholder={loginType === 'STAFF' ? "admin_01" : "S1001"}
+                  className="w-full bg-slate-950 border border-white/5 rounded-2xl px-12 py-4 text-sm font-semibold text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-700"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Maxfiy Kod</label>
-              <div className="relative group/input">
-                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                  <Lock className="text-slate-500 group-focus-within/input:text-cyan-400 transition-colors" size={20} />
-                </div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Parol</label>
+              <div className="relative">
+                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input 
-                  required
-                  type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  required type="password" value={password} onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-950/50 border border-slate-800 text-white rounded-2xl pl-14 pr-6 py-5 outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500/50 transition-all font-bold placeholder:text-slate-700"
+                  className="w-full bg-slate-950 border border-white/5 rounded-2xl px-12 py-4 text-sm font-semibold text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-700"
                 />
               </div>
+              {loginType === 'STUDENT' && (
+                <p className="text-[9px] text-slate-500 font-medium mt-2 italic">* Birinchi marta kirayotgan bo'lsangiz: "password"</p>
+              )}
             </div>
 
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full relative group/btn overflow-hidden"
+              className={`w-full py-4 rounded-2xl text-sm font-bold shadow-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98] text-white ${loginType === 'STAFF' ? 'bg-blue-600 shadow-blue-600/20' : 'bg-indigo-600 shadow-indigo-600/20'}`}
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-indigo-600 group-hover/btn:scale-105 transition-transform duration-500"></div>
-              <div className="relative flex items-center justify-center gap-3 py-5 bg-cyan-600 text-white font-black rounded-2xl hover:bg-cyan-500 transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] uppercase tracking-widest text-xs">
-                {loading ? (
-                  <Activity size={18} className="animate-spin" />
-                ) : (
-                  <>
-                    <span>AUTORIZATSIYA</span>
-                    <ArrowRight size={18} className="group-hover/btn:translate-x-2 transition-transform" />
-                  </>
-                )}
-              </div>
+              {loading ? <Loader2 size={18} className="animate-spin" /> : 'Tizimga kirish'} 
+              {!loading && <ChevronRight size={18} />}
             </button>
-            
-            <div className="flex items-center justify-center gap-4 text-slate-600 text-[10px] font-bold uppercase tracking-widest pt-4">
-               <div className="flex items-center gap-1">
-                 <Zap size={10} className="text-cyan-500" />
-                 <span>Encrypted Session</span>
-               </div>
-               <div className="w-1 h-1 rounded-full bg-slate-800"></div>
-               <div className="flex items-center gap-1">
-                 <ShieldCheck size={10} className="text-indigo-500" />
-                 <span>Secure Access</span>
-               </div>
-            </div>
           </form>
+
+          <div className="mt-8 flex items-center justify-center gap-6 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+            <span className="flex items-center gap-2"><Globe size={12}/> Secure Auth</span>
+            <span className="w-1 h-1 bg-slate-800 rounded-full"></span>
+            <span>v1.2.0 Stable</span>
+          </div>
         </div>
 
-        <p className="text-center mt-8 text-slate-500 text-[10px] font-black uppercase tracking-[0.3em]">
-          Tizim faqat vakolatli xodimlar uchun. Barcha harakatlar loglanadi.
+        <p className="text-center mt-8 text-slate-500 text-[9px] font-medium uppercase tracking-[0.3em]">
+          &copy; 2025 VELMOR IT SOLUTIONS. ALL RIGHTS RESERVED.
         </p>
       </div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes scan {
-          0% { transform: translateY(-100vh); }
-          100% { transform: translateY(100vh); }
-        }
-      `}} />
     </div>
   );
 };
