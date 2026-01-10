@@ -224,5 +224,5 @@ app.post('/api/payments', auth, async (req, res) => {
   res.json(p);
 });
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`>>> SERVER ON PORT ${PORT}`));
