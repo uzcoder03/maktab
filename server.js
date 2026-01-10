@@ -223,6 +223,9 @@ app.post('/api/payments', auth, async (req, res) => {
   await Student.findByIdAndUpdate(req.body.studentId, { $inc: { balance: req.body.amount * multiplier } });
   res.json(p);
 });
+app.get('/', (req, res) => {
+  res.send('Hello, World!');
+});
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`>>> SERVER ON PORT ${PORT}`));
